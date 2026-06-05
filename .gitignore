@@ -1,0 +1,21 @@
+# data + artifacts (rebuilt on the cluster)
+data/
+logs/
+*.pkl
+*.pt
+*.json
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+
+# envs / installers
+miniforge3/
+miniconda3/
+.venv/
+env/
+
+# os
+.DS_Store

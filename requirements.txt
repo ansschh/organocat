@@ -1,0 +1,14 @@
+# Core ML
+torch
+torch_geometric
+numpy
+scikit-learn
+
+# Chemistry
+rdkit
+rxnmapper            # atom-mapping (pulls a compatible transformers/tokenizers)
+ord-schema           # ORD protobuf schema (Reaction / Dataset messages)
+
+# Data
+pandas
+pyarrow              # parquet support (only needed if ORD ships as .parquet)
