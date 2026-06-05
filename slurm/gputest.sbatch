@@ -2,7 +2,7 @@
 #SBATCH --job-name=gputest
 #SBATCH --partition=gpu
 #SBATCH --account=tensorlab
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:h100:1
 #SBATCH --time=00:05:00
 #SBATCH --output=logs/gputest.out
 # Confirms the cu130 torch build actually sees the GPU on a compute node.
