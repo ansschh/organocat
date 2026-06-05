@@ -64,6 +64,30 @@ def as_pairdata(pairs):
     return pairs
 
 
+def sanitize_pairs(pairs):
+    """Drop pairs whose catalyst/reaction subgraph is internally inconsistent
+    (edge index out of range, node-count mismatch, missing metal). A single bad
+    graph triggers a CUDA device-side assert that aborts the whole job, so we
+    filter up front and report WHY each was dropped."""
+    from collections import Counter
+    good, reasons = [], Counter()
+    for p in pairs:
+        n = int(p.cat_n_atoms); ce = p.cat_edge_index; re = p.edge_index
+        if p.cat_pos.size(0) != n:
+            reasons["cat_pos!=n"] += 1; continue
+        if int(p.cat_metal_mask.sum()) != 1:
+            reasons["metal_mask!=1"] += 1; continue
+        if ce.numel() and (int(ce.max()) >= n or int(ce.min()) < 0):
+            reasons["cat_edge_oob"] += 1; continue
+        if p.x.size(0) == 0:
+            reasons["empty_rxn"] += 1; continue
+        if re.numel() and (int(re.max()) >= p.x.size(0) or int(re.min()) < 0):
+            reasons["rxn_edge_oob"] += 1; continue
+        good.append(p)
+    print(f"sanitize: kept {len(good)}/{len(pairs)}  dropped={dict(reasons)}", flush=True)
+    return good
+
+
 def cat_batch_from(combined_batch):
     device = combined_batch.cat_pos.device
     n_per = combined_batch.cat_n_atoms
@@ -325,6 +349,7 @@ def main():
     if args.limit:
         pairs = pairs[:args.limit]
     as_pairdata(pairs)        # correct catalyst-index increments on batching
+    pairs = sanitize_pairs(pairs)   # drop inconsistent graphs (avoid CUDA assert)
     clean = pickle.load(open(args.clean_pkl, "rb"))
     rxn_lookup = {r["reaction_id"]: {"reactants_smi": r["reactants_smi"],
                                      "products_smi": r["products_smi"],
