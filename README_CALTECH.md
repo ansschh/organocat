@@ -54,10 +54,10 @@ The `--inspect` line prints the first file's columns. If the full build (STEP 5)
 later reports *"could not auto-detect serialized-protobuf column"*, paste me the
 `--inspect` output and I'll patch `ord_parser.py`.
 
-## STEP 4 — point the SLURM jobs at your allocation
+## STEP 4 — (already done) SLURM allocation
 
-Edit `slurm/build_dataset.sbatch` and `slurm/run_bench.sbatch`: set
-`--partition` and uncomment/set `--account` to match STEP 0.
+The sbatch files are pre-filled for this cluster: `--partition=gpu`,
+`--account=tensorlab`. Nothing to edit unless your allocation changes.
 
 ## STEP 5 — build the dataset (GPU job)
 

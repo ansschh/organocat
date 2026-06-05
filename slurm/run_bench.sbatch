@@ -8,9 +8,9 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
 #SBATCH --gres=gpu:1
-# >>> EDIT for your allocation <<<
+# Caltech Resnick HPC (finalized):
 #SBATCH --partition=gpu
-##SBATCH --account=CHANGE_ME
+#SBATCH --account=tensorlab
 #
 # RAS-Bench v0: trains Z_cat-CLIP across splits and prints the go/no-go table.
 set -euo pipefail

@@ -20,7 +20,8 @@ else
     echo "[setup] no conda found; installing Miniforge into \$ROOT/../miniforge3"
     MF="$ROOT/../miniforge3"
     if [ ! -d "$MF" ]; then
-        wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O /tmp/mf.sh
+        URL="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh"
+        wget -q "$URL" -O /tmp/mf.sh || curl -fsSL "$URL" -o /tmp/mf.sh
         bash /tmp/mf.sh -b -p "$MF"
     fi
     CONDA_BASE="$MF"
@@ -34,6 +35,12 @@ if ! conda env list | grep -qE "^\s*$ENV_NAME\s"; then
 fi
 conda activate "$ENV_NAME"
 python -V
+
+# git-lfs is absent on this cluster; install into the env (needed by download_ord.sh)
+if ! command -v git-lfs >/dev/null 2>&1; then
+    conda install -y -c conda-forge git-lfs
+fi
+git lfs install
 
 # ---- 3. install deps (order matters: torch first) ---------------------------
 # torch ships its own CUDA runtime; the default linux wheel is CUDA-enabled and

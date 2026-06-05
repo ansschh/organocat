@@ -8,10 +8,9 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
 #SBATCH --gres=gpu:1
-# >>> EDIT THESE for your Caltech allocation (see `sacctmgr show assoc user=$USER`
-#     and `sinfo -s` for partitions): <<<
+# Caltech Resnick HPC (finalized from `sinfo`/`sacctmgr`):
 #SBATCH --partition=gpu
-##SBATCH --account=CHANGE_ME
+#SBATCH --account=tensorlab
 #
 # Builds the dataset from raw ORD:
 #   parse_ord -> clean_and_atom_map_ord -> contrastive_dataset (3D pairs)
