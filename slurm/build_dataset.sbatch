@@ -17,7 +17,9 @@
 # Assumes setup_env.sh already ran on a login node and ORD was downloaded.
 set -euo pipefail
 
-export ORGANOCAT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# SLURM copies this script to a spool dir, so $0 is NOT the repo path.
+# Use the directory sbatch was invoked from (the repo root).
+export ORGANOCAT_ROOT="${SLURM_SUBMIT_DIR:-$PWD}"
 cd "$ORGANOCAT_ROOT"
 mkdir -p logs data/reactions data/pairs
 export PYTHONPATH="$ORGANOCAT_ROOT:${PYTHONPATH:-}"

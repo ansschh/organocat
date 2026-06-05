@@ -15,7 +15,8 @@
 # RAS-Bench v0: trains Z_cat-CLIP across splits and prints the go/no-go table.
 set -euo pipefail
 
-export ORGANOCAT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# SLURM copies this script to a spool dir, so $0 is NOT the repo path.
+export ORGANOCAT_ROOT="${SLURM_SUBMIT_DIR:-$PWD}"
 cd "$ORGANOCAT_ROOT"
 mkdir -p logs
 export PYTHONPATH="$ORGANOCAT_ROOT:${PYTHONPATH:-}"
