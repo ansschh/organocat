@@ -1,6 +1,7 @@
-# data + artifacts (rebuilt on the cluster)
-data/
-logs/
+# data + artifacts (rebuilt on the cluster) — anchored to repo root so this does
+# NOT swallow the src/data/ source package
+/data/
+/logs/
 *.pkl
 *.pt
 *.json
