@@ -46,7 +46,10 @@ git lfs install
 # torch ships its own CUDA runtime; the default linux wheel is CUDA-enabled and
 # works on most modern HPC GPUs regardless of the system CUDA module.
 pip install --upgrade pip
-pip install torch
+# Caltech gpu nodes (Tesla P100) run driver 575 / CUDA 12.9 -> need a CUDA 12.x
+# torch build (the default wheel is cu130/CUDA13 and is "driver too old").
+pip install torch --index-url https://download.pytorch.org/whl/cu128 \
+  || pip install torch --index-url https://download.pytorch.org/whl/cu124
 pip install rxnmapper            # resolves a compatible transformers/tokenizers
 pip install rdkit                # ensure a recent rdkit (rxnmapper may pin old)
 pip install torch_geometric
