@@ -30,6 +30,18 @@ from rdkit.Chem import AllChem
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
+# rdkit 2024+/2026 moved ETKDGv3 + EmbedMolecule into rdDistGeom and may not
+# re-export them on AllChem. Resolve from the canonical module, fall back to
+# AllChem for older rdkit. (On rdkit 2026 AllChem.ETKDGv3 can be missing, which
+# made every catalyst embed raise AttributeError -> caught -> None -> 0 pairs.)
+try:
+    from rdkit.Chem import rdDistGeom as _DG
+    _ETKDGv3 = _DG.ETKDGv3
+    _EmbedMolecule = _DG.EmbedMolecule
+except Exception:  # pragma: no cover
+    _ETKDGv3 = AllChem.ETKDGv3
+    _EmbedMolecule = AllChem.EmbedMolecule
+
 
 class TimeoutError_(Exception):
     pass
@@ -58,15 +70,15 @@ def embed_catalyst_3d(smi: str, max_attempts: int = 3) -> Optional[dict]:
         return None
     if mol.GetNumAtoms() > 150: return None
 
-    params = AllChem.ETKDGv3()
+    params = _ETKDGv3()
     params.randomSeed = 42
     params.maxAttempts = 30      # was 100 - tighter for speed
     params.useRandomCoords = True
-    code = AllChem.EmbedMolecule(mol, params)
+    code = _EmbedMolecule(mol, params)
     if code != 0:
         for attempt in range(max_attempts):
             params.randomSeed = attempt * 7 + 1
-            code = AllChem.EmbedMolecule(mol, params)
+            code = _EmbedMolecule(mol, params)
             if code == 0: break
     if code != 0:
         return None
@@ -154,7 +166,9 @@ def build_contrastive_pairs(clean_pkl: str, out_pkl: str,
     else:
         cat_cache = {}
 
-    todo = [(smi, cnt) for smi, cnt in cat_freq.most_common() if smi not in cat_cache]
+    # retry entries that previously failed (cached as None), not just unseen ones
+    todo = [(smi, cnt) for smi, cnt in cat_freq.most_common()
+            if cat_cache.get(smi) is None]
     print(f"to embed: {len(todo)} (sorted by usage)", flush=True)
 
     n_ok = sum(1 for v in cat_cache.values() if v is not None)
