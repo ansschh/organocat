@@ -46,10 +46,10 @@ git lfs install
 # torch ships its own CUDA runtime; the default linux wheel is CUDA-enabled and
 # works on most modern HPC GPUs regardless of the system CUDA module.
 pip install --upgrade pip
-# Caltech gpu nodes (Tesla P100) run driver 575 / CUDA 12.9 -> need a CUDA 12.x
-# torch build (the default wheel is cu130/CUDA13 and is "driver too old").
-pip install torch --index-url https://download.pytorch.org/whl/cu128 \
-  || pip install torch --index-url https://download.pytorch.org/whl/cu124
+# Caltech gpu nodes are Tesla P100 = compute capability sm_60. Recent torch
+# wheels (>=2.5) drop sm_60, so CUDA "works" but kernels fail with "no kernel
+# image". torch 2.4.1+cu121 still ships sm_60 and runs on driver 575/CUDA12.9.
+pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cu121
 pip install rxnmapper            # resolves a compatible transformers/tokenizers
 pip install rdkit                # ensure a recent rdkit (rxnmapper may pin old)
 pip install torch_geometric
