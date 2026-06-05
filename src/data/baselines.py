@@ -138,49 +138,62 @@ def popularity_scores(train_rxns, eval_rxns, pool) -> torch.Tensor:
 
 
 def morgan_knn_scores(train_rxns, eval_rxns, pool, mode="diff",
-                      topk_neighbors=25) -> torch.Tensor:
+                      topk_neighbors=25, max_train=50000, seed=0) -> torch.Tensor:
     """kNN in reaction-fingerprint space. For each eval reaction, score pool
     catalyst c = max Tanimoto similarity to any train reaction whose catalyst
     is c (nearest-neighbor vote). 'diff' uses reactant+product; 'reactant' uses
-    reactants only (ablation: does product/Δ info matter)."""
-    # Precompute train FPs grouped by catalyst.
-    tr_fps, tr_cat = [], []
+    reactants only (ablation: does product/Δ info matter).
+
+    Uses rdkit's C++ BulkTanimotoSimilarity (NOT a Python loop) so it scales to
+    100k+ train reactions; train is capped at max_train via random sample."""
+    import random
+    rng = random.Random(seed)
+    if len(train_rxns) > max_train:
+        train_rxns = rng.sample(train_rxns, max_train)
+
+    # Precompute train FPs as flat lists for bulk similarity.
+    tr_cat = []
+    tr_fps = []            # reactant-mode: list of bitvects
+    tr_rfps, tr_pfps = [], []   # diff-mode: reactant + product bitvects
     for r in train_rxns:
         fp = _rxn_fp(r, mode)
         if fp is None:
             continue
-        tr_fps.append(fp); tr_cat.append(r["catalyst_smi"])
+        if mode == "reactant":
+            tr_fps.append(fp)
+        else:
+            tr_rfps.append(fp[0]); tr_pfps.append(fp[1])
+        tr_cat.append(r["catalyst_smi"])
     pool_idx = {s: i for i, s in enumerate(pool)}
 
-    def sim(a, b):
-        if mode == "reactant":
-            return DataStructs.TanimotoSimilarity(a, b)
-        return 0.5 * (DataStructs.TanimotoSimilarity(a[0], b[0]) +
-                      DataStructs.TanimotoSimilarity(a[1], b[1]))
-
     scores = torch.zeros(len(eval_rxns), len(pool))
+    if not tr_cat:
+        return scores
     for ei, r in enumerate(eval_rxns):
         ef = _rxn_fp(r, mode)
         if ef is None:
             continue
-        sims = [sim(ef, tf) for tf in tr_fps]
-        if not sims:
-            continue
+        if mode == "reactant":
+            sims = np.asarray(DataStructs.BulkTanimotoSimilarity(ef, tr_fps))
+        else:
+            sr = np.asarray(DataStructs.BulkTanimotoSimilarity(ef[0], tr_rfps))
+            sp = np.asarray(DataStructs.BulkTanimotoSimilarity(ef[1], tr_pfps))
+            sims = 0.5 * (sr + sp)
         order = np.argsort(sims)[::-1][:topk_neighbors]
         for j in order:
-            c = tr_cat[j]
-            pi = pool_idx.get(c)
+            pi = pool_idx.get(tr_cat[j])
             if pi is None:
                 continue                       # train catalyst not in eval pool
-            scores[ei, pi] = max(scores[ei, pi].item(), sims[j])
+            if sims[j] > float(scores[ei, pi]):
+                scores[ei, pi] = float(sims[j])
         # family back-off: if no train neighbor shares an eval-pool catalyst,
         # spread the neighbor's similarity over pool catalysts of the same family
-        if scores[ei].max() == 0:
+        if float(scores[ei].max()) == 0:
             fam_best = defaultdict(float)
             for j in order:
                 f = _family(tr_cat[j])
                 if f:
-                    fam_best[f] = max(fam_best[f], sims[j])
+                    fam_best[f] = max(fam_best[f], float(sims[j]))
             for pi, s in enumerate(pool):
                 f = _family(s)
                 if f in fam_best:

@@ -39,6 +39,31 @@ from src.data import baselines as B
 
 # ----------------------- catalyst batch reconstruction -----------------------
 
+class PairData(Data):
+    """Each pair holds a reaction graph (x/edge_index/edge_attr) AND a catalyst
+    graph (cat_*) in one object. PyG auto-increments any key containing 'index'
+    by the MAIN graph's node count, which corrupts cat_edge_index/cat_metal_idx
+    (they index the catalyst nodes, not the reaction nodes). Override the
+    increments so batching offsets them by the catalyst node count instead."""
+    def __inc__(self, key, value, *args, **kwargs):
+        if key in ("cat_edge_index", "cat_metal_idx"):
+            return self.cat_pos.size(0)
+        return super().__inc__(key, value, *args, **kwargs)
+
+    def __cat_dim__(self, key, value, *args, **kwargs):
+        if key == "cat_edge_index":
+            return -1
+        return super().__cat_dim__(key, value, *args, **kwargs)
+
+
+def as_pairdata(pairs):
+    """Re-class plain Data pairs (as saved on disk) to PairData in place (zero
+    copy) so correct batch increments apply."""
+    for p in pairs:
+        p.__class__ = PairData
+    return pairs
+
+
 def cat_batch_from(combined_batch):
     device = combined_batch.cat_pos.device
     n_per = combined_batch.cat_n_atoms
@@ -151,7 +176,16 @@ def train_split(pairs, train_idx, device, epochs=15, bs=64, lr=3e-4, temp=0.1,
 
 # ----------------------------- evaluation -----------------------------
 
-def eval_split(model, pairs, eval_idx, train_idx, rxn_lookup, device, top_ks=(1, 5, 10)):
+def eval_split(model, pairs, eval_idx, train_idx, rxn_lookup, device, top_ks=(1, 5, 10),
+               max_eval=6000):
+    # Cap the eval set so learned + baselines are scored on the SAME bounded
+    # sample (leave-metal-out can put tens of thousands of reactions in test;
+    # the Morgan-kNN baseline would be far too slow over all of them).
+    if len(eval_idx) > max_eval:
+        g = torch.Generator().manual_seed(0)
+        sel = torch.randperm(len(eval_idx), generator=g)[:max_eval].tolist()
+        eval_idx = [eval_idx[i] for i in sel]
+        print(f"    [eval capped to {max_eval} of {len(sel)} sampled reactions]", flush=True)
     # Build eval reaction dicts (for baselines + pool) from the SAME pairs.
     eval_rxns = [rxn_lookup[pairs[i].reaction_id] for i in eval_idx]
     train_rxns = [rxn_lookup[pairs[i].reaction_id] for i in train_idx]
@@ -283,6 +317,7 @@ def main():
     pairs = pickle.load(open(args.pairs_pkl, "rb"))["pairs"]
     if args.limit:
         pairs = pairs[:args.limit]
+    as_pairdata(pairs)        # correct catalyst-index increments on batching
     clean = pickle.load(open(args.clean_pkl, "rb"))
     rxn_lookup = {r["reaction_id"]: {"reactants_smi": r["reactants_smi"],
                                      "products_smi": r["products_smi"],
