@@ -76,22 +76,24 @@ def cat_batch_from(combined_batch):
                edge_attr=combined_batch.cat_edge_attr,
                metal_mask=combined_batch.cat_metal_mask)
     cat.batch = cb
-    cat.metal_idx = combined_batch.cat_metal_idx
     return cat
 
 
 def representative_cat_data(pairs, idxs):
-    """One catalyst Data per unique catalyst SMILES in idxs (for pool encoding)."""
+    """One catalyst Data per unique catalyst SMILES in idxs (for pool/bank
+    encoding). Uses STANDARD PyG keys (pos/z/edge_index/...) so these
+    catalyst-only graphs batch normally — no cat_* keys fighting PyG."""
     seen = {}
     for i in idxs:
         p = pairs[i]
         s = p.catalyst_smi
         if s not in seen:
-            seen[s] = Data(
-                cat_pos=p.cat_pos, cat_z=p.cat_z, cat_charges=p.cat_charges,
-                cat_edge_index=p.cat_edge_index, cat_edge_attr=p.cat_edge_attr,
-                cat_metal_mask=p.cat_metal_mask, cat_metal_idx=p.cat_metal_idx,
-                cat_n_atoms=p.cat_n_atoms, catalyst_smi=s)
+            d = Data(
+                pos=p.cat_pos, z=p.cat_z, charges=p.cat_charges,
+                edge_index=p.cat_edge_index, edge_attr=p.cat_edge_attr,
+                metal_mask=p.cat_metal_mask)
+            d.num_nodes = p.cat_pos.size(0)
+            seen[s] = d
     return seen
 
 
@@ -109,7 +111,12 @@ class ZCatModel(nn.Module):
         return self.pr(self.rxn(batch))
 
     def enc_cat(self, batch):
+        # combined (reaction+catalyst) pair batch: extract the catalyst subgraph
         return self.pc(self.cat(cat_batch_from(batch)))
+
+    def enc_cat_std(self, std_batch):
+        # catalyst-only batch already in standard PyG keys (pool/bank)
+        return self.pc(self.cat(std_batch))
 
 
 def encode_pool(model, cat_dict, device, bs=128):
@@ -122,7 +129,7 @@ def encode_pool(model, cat_dict, device, bs=128):
         for i in range(0, len(datas), bs):
             from torch_geometric.data import Batch
             batch = Batch.from_data_list(datas[i:i + bs]).to(device)
-            embs.append(model.enc_cat(batch))
+            embs.append(model.enc_cat_std(batch))
     return torch.cat(embs), smis
 
 
@@ -154,7 +161,7 @@ def train_split(pairs, train_idx, device, epochs=15, bs=64, lr=3e-4, temp=0.1,
             with torch.no_grad():
                 for i in range(0, len(bank_datas), 128):
                     b = Batch.from_data_list(bank_datas[i:i + 128]).to(device)
-                    embs.append(model.enc_cat(b))
+                    embs.append(model.enc_cat_std(b))
             bank_emb = torch.cat(embs)             # (Nbank, D) detached
             model.train()
         for batch in loader:

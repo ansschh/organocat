@@ -138,10 +138,8 @@ class ComplexEGNN(nn.Module):
         # Graph-level pooling: mean of all nodes + metal node
         batch = data.batch if data.batch is not None else torch.zeros(h.size(0), dtype=torch.long, device=h.device)
         h_mean = scatter(h, batch, dim=0, reduce="mean")               # (B, H)
-        # metal-only pool: we know exactly one metal per graph
-        metal_idx = data.metal_idx.view(-1)                            # (B,)
-        # metal_idx is per-graph local; but PyG batches → need global. Use data.metal_mask:
-        # global metal idx: scatter-search via metal_mask + batch
+        # metal-only pool: exactly one metal per graph, selected via the boolean
+        # metal_mask (concatenates correctly under PyG batching; no index offset).
         h_metal = h[data.metal_mask]                                   # (B, H)  -- one per graph
         graph_feat = torch.cat([h_mean, h_metal], dim=-1)
         emb = self.pool_head(graph_feat)
