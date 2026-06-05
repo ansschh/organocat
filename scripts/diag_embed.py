@@ -39,7 +39,7 @@ for smi in cats[:6]:
     try:
         mh = Chem.AddHs(m)
         print(" with Hs:", mh.GetNumAtoms())
-        p = DG.ETKDGv3(); p.randomSeed = 42; p.useRandomCoords = True; p.maxAttempts = 30
+        p = DG.ETKDGv3(); p.randomSeed = 42; p.useRandomCoords = True
         code = DG.EmbedMolecule(mh, p)
         print(" embed code:", code, "(0 = success)")
     except Exception as e:

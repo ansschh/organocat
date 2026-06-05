@@ -72,8 +72,9 @@ def embed_catalyst_3d(smi: str, max_attempts: int = 3) -> Optional[dict]:
 
     params = _ETKDGv3()
     params.randomSeed = 42
-    params.maxAttempts = 30      # was 100 - tighter for speed
-    params.useRandomCoords = True
+    params.useRandomCoords = True   # critical for hard TM-complex cases
+    # NB: do NOT set params.maxAttempts — not a valid ETKDG attribute on rdkit
+    # 2026 (raises AttributeError); the seed-varying retry loop covers attempts.
     code = _EmbedMolecule(mol, params)
     if code != 0:
         for attempt in range(max_attempts):
