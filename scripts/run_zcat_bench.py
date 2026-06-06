@@ -41,13 +41,14 @@ from src.data import baselines as B
 
 class PairData(Data):
     """Each pair holds a reaction graph (x/edge_index/edge_attr) AND a catalyst
-    graph (cat_*) in one object. PyG auto-increments any key containing 'index'
-    by the MAIN graph's node count, which corrupts cat_edge_index/cat_metal_idx
-    (they index the catalyst nodes, not the reaction nodes). Override the
-    increments so batching offsets them by the catalyst node count instead."""
+    graph (cat_*) in one object. PyG's automatic index-increment is unreliable
+    here (it ends up adding the reaction-graph node offset to cat_edge_index too),
+    so we tell PyG to NOT offset the catalyst index keys (inc=0) and instead apply
+    the correct catalyst-node offset ourselves in cat_batch_from() using the
+    per-pair node (cat_n_atoms) and bond (cat_n_bonds) counts."""
     def __inc__(self, key, value, *args, **kwargs):
         if key in ("cat_edge_index", "cat_metal_idx"):
-            return self.cat_pos.size(0)
+            return 0
         return super().__inc__(key, value, *args, **kwargs)
 
     def __cat_dim__(self, key, value, *args, **kwargs):
@@ -58,9 +59,10 @@ class PairData(Data):
 
 def as_pairdata(pairs):
     """Re-class plain Data pairs (as saved on disk) to PairData in place (zero
-    copy) so correct batch increments apply."""
+    copy) and record each catalyst's bond count for manual batch offsetting."""
     for p in pairs:
         p.__class__ = PairData
+        p.cat_n_bonds = int(p.cat_edge_index.size(1))
     return pairs
 
 
@@ -89,15 +91,31 @@ def sanitize_pairs(pairs):
 
 
 def cat_batch_from(combined_batch):
+    """Rebuild a standard-key catalyst batch from the combined pair batch, applying
+    the catalyst-node offset to cat_edge_index MANUALLY (PyG was told inc=0)."""
     device = combined_batch.cat_pos.device
     n_per = combined_batch.cat_n_atoms
     n_list = n_per.tolist() if torch.is_tensor(n_per) else list(n_per)
+    nb = combined_batch.cat_n_bonds
+    nb_list = nb.tolist() if torch.is_tensor(nb) else list(nb)
+    # node -> graph assignment
     cb = torch.cat([torch.full((n,), i, dtype=torch.long, device=device)
                     for i, n in enumerate(n_list)])
+    # cumulative node offset per graph
+    node_off, acc = [], 0
+    for n in n_list:
+        node_off.append(acc); acc += n
+    # per-edge-column offset = its graph's node offset (cat_edge_index columns are
+    # concatenated per pair in the same order, nb_list giving each pair's width)
+    if nb_list:
+        edge_off = torch.cat([torch.full((w,), node_off[i], dtype=torch.long, device=device)
+                              for i, w in enumerate(nb_list)])
+        ei = combined_batch.cat_edge_index + edge_off.unsqueeze(0)
+    else:
+        ei = combined_batch.cat_edge_index
     cat = Data(pos=combined_batch.cat_pos, z=combined_batch.cat_z,
                charges=combined_batch.cat_charges,
-               edge_index=combined_batch.cat_edge_index,
-               edge_attr=combined_batch.cat_edge_attr,
+               edge_index=ei, edge_attr=combined_batch.cat_edge_attr,
                metal_mask=combined_batch.cat_metal_mask)
     cat.batch = cb
     return cat
