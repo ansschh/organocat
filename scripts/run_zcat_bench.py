@@ -47,12 +47,14 @@ class PairData(Data):
     the correct catalyst-node offset ourselves in cat_batch_from() using the
     per-pair node (cat_n_atoms) and bond (cat_n_bonds) counts."""
     def __inc__(self, key, value, *args, **kwargs):
+        if key == "edge_index":
+            return self.x.size(0)          # reaction edges offset by reaction nodes
         if key in ("cat_edge_index", "cat_metal_idx"):
-            return 0
+            return 0                         # catalyst edges offset manually
         return super().__inc__(key, value, *args, **kwargs)
 
     def __cat_dim__(self, key, value, *args, **kwargs):
-        if key == "cat_edge_index":
+        if key in ("edge_index", "cat_edge_index"):
             return -1
         return super().__cat_dim__(key, value, *args, **kwargs)
 
@@ -65,6 +67,7 @@ def as_pairdata(pairs):
     out = []
     for p in pairs:
         d = PairData(**p.to_dict())
+        d.num_nodes = int(d.x.size(0))     # pin node count to the REACTION graph
         d.cat_n_bonds = int(d.cat_edge_index.size(1))
         out.append(d)
     return out

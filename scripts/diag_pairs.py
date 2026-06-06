@@ -23,16 +23,21 @@ bad = total = 0
 for i in range(0, len(pairs), 64):
     chunk = pairs[i:i + 64]; total += 1
     b = Batch.from_data_list(chunk)
+    # reaction graph: edges must index into x, batch must cover x and span chunk
+    r_emax = int(b.edge_index.max()) if b.edge_index.numel() else -1
+    r_n = b.x.size(0)
+    r_ok = (b.batch.size(0) == r_n) and (int(b.batch.max()) + 1 == len(chunk)) and r_emax < r_n
+    # catalyst graph (via the actual cat_batch_from)
     cat = cat_batch_from(b)
-    npos = cat.pos.size(0)
-    emax = int(cat.edge_index.max()) if cat.edge_index.numel() else -1
-    nb = int(cat.batch.max()) + 1
-    mm = int(cat.metal_mask.sum())
-    if emax >= npos or nb != len(chunk) or mm != len(chunk):
+    c_emax = int(cat.edge_index.max()) if cat.edge_index.numel() else -1
+    c_n = cat.pos.size(0)
+    c_ok = (cat.batch.size(0) == c_n) and (int(cat.batch.max()) + 1 == len(chunk)) \
+        and c_emax < c_n and int(cat.metal_mask.sum()) == len(chunk)
+    if not (r_ok and c_ok):
         bad += 1
         if bad <= 5:
-            print(f"BAD chunk @ {i}: edge_max={emax} npos={npos} "
-                  f"nbatch={nb} metal_sum={mm} chunk={len(chunk)}", flush=True)
+            print(f"BAD @ {i}: rxn[emax={r_emax}/{r_n} ok={r_ok}] "
+                  f"cat[emax={c_emax}/{c_n} ok={c_ok}]", flush=True)
 print(f"bad chunks: {bad}/{total}", flush=True)
-print("FIX OK — catalyst batching is correct" if bad == 0
+print("FIX OK — reaction AND catalyst batching correct" if bad == 0
       else "STILL BROKEN", flush=True)
