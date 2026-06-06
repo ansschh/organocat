@@ -58,12 +58,16 @@ class PairData(Data):
 
 
 def as_pairdata(pairs):
-    """Re-class plain Data pairs (as saved on disk) to PairData in place (zero
-    copy) and record each catalyst's bond count for manual batch offsetting."""
+    """Build GENUINE PairData objects (constructor, not `__class__ =` reassignment
+    — Data.__setattr__ silently swallows that, leaving the object a plain Data so
+    PyG ignores our __inc__/__cat_dim__). Also record each catalyst's bond count
+    for manual batch offsetting. Returns a NEW list."""
+    out = []
     for p in pairs:
-        p.__class__ = PairData
-        p.cat_n_bonds = int(p.cat_edge_index.size(1))
-    return pairs
+        d = PairData(**p.to_dict())
+        d.cat_n_bonds = int(d.cat_edge_index.size(1))
+        out.append(d)
+    return out
 
 
 def sanitize_pairs(pairs):
@@ -366,8 +370,8 @@ def main():
     pairs = pickle.load(open(args.pairs_pkl, "rb"))["pairs"]
     if args.limit:
         pairs = pairs[:args.limit]
-    as_pairdata(pairs)        # correct catalyst-index increments on batching
-    pairs = sanitize_pairs(pairs)   # drop inconsistent graphs (avoid CUDA assert)
+    pairs = as_pairdata(pairs)        # genuine PairData (honors our __inc__)
+    pairs = sanitize_pairs(pairs)     # drop inconsistent graphs (avoid CUDA assert)
     clean = pickle.load(open(args.clean_pkl, "rb"))
     rxn_lookup = {r["reaction_id"]: {"reactants_smi": r["reactants_smi"],
                                      "products_smi": r["products_smi"],

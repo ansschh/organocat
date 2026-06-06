@@ -13,7 +13,11 @@ from run_zcat_bench import as_pairdata, cat_batch_from
 
 pairs = pickle.load(open("data/pairs/contrastive_pairs.pt", "rb"))["pairs"]
 print("loaded", len(pairs), flush=True)
-as_pairdata(pairs)          # sets PairData + cat_n_bonds
+pairs = as_pairdata(pairs)          # genuine PairData + cat_n_bonds
+p0 = pairs[0]
+print("type:", type(p0).__name__,
+      "| inc(cat_edge_index) =", p0.__inc__("cat_edge_index", p0.cat_edge_index),
+      "(want 0)", flush=True)
 
 bad = total = 0
 for i in range(0, len(pairs), 64):
